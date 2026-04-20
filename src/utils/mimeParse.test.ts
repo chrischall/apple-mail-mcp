@@ -152,3 +152,144 @@ describe("extractMimeAttachment", () => {
     expect(extractMimeAttachment("   ", "test.pdf")).toBeNull();
   });
 });
+
+// Nested multipart: mixed container with alternative (text+html) as one child
+// and the attachment as a sibling. This is the most common real-world shape.
+const MIME_NESTED_MULTIPART = `Content-Type: multipart/mixed;
+\tboundary="_outer_"
+
+--_outer_
+Content-Type: multipart/alternative;
+\tboundary="_inner_"
+
+--_inner_
+Content-Type: text/plain; charset="us-ascii"
+
+Plain body
+
+--_inner_
+Content-Type: text/html; charset="us-ascii"
+
+<html><body>HTML body</body></html>
+
+--_inner_--
+
+--_outer_
+Content-Type: application/pdf; name="nested.pdf"
+Content-Disposition: attachment; filename="nested.pdf"; size=42
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjAK
+
+--_outer_--`;
+
+// Attachment nested inside multipart/related (common for HTML emails
+// with inline images that also carry a real file attachment).
+const MIME_DEEPLY_NESTED = `Content-Type: multipart/mixed;
+\tboundary="_L1_"
+
+--_L1_
+Content-Type: multipart/related;
+\tboundary="_L2_"
+
+--_L2_
+Content-Type: text/html
+
+<html>body</html>
+
+--_L2_
+Content-Type: application/pdf; name="deep.pdf"
+Content-Disposition: attachment; filename="deep.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjAK
+
+--_L2_--
+
+--_L1_--`;
+
+describe("parseMimeAttachments — nested multipart", () => {
+  it("finds attachments alongside a nested multipart/alternative", () => {
+    const result = parseMimeAttachments(MIME_NESTED_MULTIPART);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("nested.pdf");
+  });
+
+  it("descends into multipart/related to find attachments", () => {
+    const result = parseMimeAttachments(MIME_DEEPLY_NESTED);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("deep.pdf");
+  });
+});
+
+describe("extractMimeAttachment — nested multipart", () => {
+  it("extracts a nested attachment by name", () => {
+    const result = extractMimeAttachment(MIME_NESTED_MULTIPART, "nested.pdf");
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("nested.pdf");
+    expect(result!.data.length).toBeGreaterThan(0);
+  });
+
+  it("extracts an attachment from deeply nested multipart/related", () => {
+    const result = extractMimeAttachment(MIME_DEEPLY_NESTED, "deep.pdf");
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("deep.pdf");
+  });
+});
+
+// Quoted-printable and raw (7bit/8bit) encoded attachments.
+// "Hello=0A" decodes to "Hello\n".
+const MIME_QP_ATTACH = `Content-Type: multipart/mixed;
+\tboundary="_QP_"
+
+--_QP_
+Content-Type: text/plain; name="note.txt"
+Content-Disposition: attachment; filename="note.txt"
+Content-Transfer-Encoding: quoted-printable
+
+Hello=0Aworld=21
+
+--_QP_--`;
+
+const MIME_7BIT_ATTACH = `Content-Type: multipart/mixed;
+\tboundary="_7B_"
+
+--_7B_
+Content-Type: text/csv; name="data.csv"
+Content-Disposition: attachment; filename="data.csv"
+Content-Transfer-Encoding: 7bit
+
+id,name
+1,alice
+2,bob
+
+--_7B_--`;
+
+describe("extractMimeAttachment — transfer encodings", () => {
+  it("decodes quoted-printable content", () => {
+    const result = extractMimeAttachment(MIME_QP_ATTACH, "note.txt");
+    expect(result).not.toBeNull();
+    expect(result!.data.toString("utf8")).toBe("Hello\nworld!");
+  });
+
+  it("returns raw bytes for 7bit content", () => {
+    const result = extractMimeAttachment(MIME_7BIT_ATTACH, "data.csv");
+    expect(result).not.toBeNull();
+    expect(result!.data.toString("utf8")).toContain("id,name");
+    expect(result!.data.toString("utf8")).toContain("alice");
+  });
+});
+
+describe("parseMimeAttachments — transfer encodings", () => {
+  it("lists quoted-printable attachments", () => {
+    const result = parseMimeAttachments(MIME_QP_ATTACH);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("note.txt");
+  });
+
+  it("lists 7bit attachments", () => {
+    const result = parseMimeAttachments(MIME_7BIT_ATTACH);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("data.csv");
+  });
+});

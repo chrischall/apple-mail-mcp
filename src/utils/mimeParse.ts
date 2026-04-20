@@ -13,7 +13,7 @@ export interface MimeAttachmentInfo {
   name: string;
   /** MIME type from Content-Type header */
   mimeType: string;
-  /** Size in bytes from Content-Disposition size parameter, or estimated from base64 */
+  /** Size in bytes from Content-Disposition size parameter, or estimated from body */
   size: number;
 }
 
@@ -22,8 +22,14 @@ export interface MimeAttachmentData extends MimeAttachmentInfo {
   data: Buffer;
 }
 
+interface MimePart {
+  headers: string;
+  body: string;
+}
+
 /**
- * Extract the boundary string from a Content-Type header.
+ * Extract the boundary string from a Content-Type header value
+ * (or from any string containing a boundary= parameter).
  */
 function extractBoundary(source: string): string | null {
   const match = source.match(/boundary="?([^";\s\r\n]+)"?/i);
@@ -101,13 +107,11 @@ function estimateBase64Size(base64Body: string): number {
 }
 
 /**
- * Split MIME source into parts using the boundary.
+ * Split a MIME block into parts using the given boundary.
+ * Does not recurse — call walkLeafParts for recursive traversal.
  */
-function splitMimeParts(
-  source: string,
-  boundary: string
-): Array<{ headers: string; body: string }> {
-  const parts: Array<{ headers: string; body: string }> = [];
+function splitMimeParts(source: string, boundary: string): MimePart[] {
+  const parts: MimePart[] = [];
   const boundaryDelim = `--${boundary}`;
 
   const sections = source.split(boundaryDelim);
@@ -130,8 +134,81 @@ function splitMimeParts(
 }
 
 /**
+ * Walk a multipart MIME block and return all non-multipart leaf parts,
+ * descending into nested multipart/* containers (alternative, related, mixed).
+ */
+function walkLeafParts(source: string, boundary: string): MimePart[] {
+  const result: MimePart[] = [];
+  const parts = splitMimeParts(source, boundary);
+
+  for (const part of parts) {
+    const ct = getHeader(part.headers, "Content-Type");
+    if (ct && /^multipart\//i.test(ct)) {
+      const nestedBoundary = extractBoundary(ct);
+      if (nestedBoundary) {
+        result.push(...walkLeafParts(part.body, nestedBoundary));
+        continue;
+      }
+    }
+    result.push(part);
+  }
+
+  return result;
+}
+
+/**
+ * Decode a MIME part body to bytes based on its transfer encoding.
+ * Supports base64, quoted-printable, and 7bit/8bit/binary (raw).
+ */
+function decodeBody(body: string, encoding: string | null): Buffer {
+  const enc = (encoding || "").toLowerCase().trim();
+  if (enc === "base64") {
+    return Buffer.from(body.replace(/[\s\r\n]/g, ""), "base64");
+  }
+  if (enc === "quoted-printable") {
+    return decodeQuotedPrintable(body);
+  }
+  // 7bit, 8bit, binary, or unspecified — treat as raw bytes
+  return Buffer.from(body, "binary");
+}
+
+/**
+ * Decode quoted-printable-encoded body to bytes.
+ * Handles soft line breaks (=<CRLF>) and =XX hex escapes per RFC 2045 §6.7.
+ */
+function decodeQuotedPrintable(body: string): Buffer {
+  // Remove soft line breaks: `=` immediately followed by CRLF or LF
+  const noSoft = body.replace(/=\r?\n/g, "");
+  const bytes: number[] = [];
+  for (let i = 0; i < noSoft.length; i++) {
+    const c = noSoft[i];
+    if (c === "=" && i + 2 < noSoft.length) {
+      const hex = noSoft.substring(i + 1, i + 3);
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16));
+        i += 2;
+        continue;
+      }
+    }
+    bytes.push(c.charCodeAt(0) & 0xff);
+  }
+  return Buffer.from(bytes);
+}
+
+/**
+ * Estimate body size for metadata when Content-Disposition size is absent.
+ */
+function estimateSize(body: string, encoding: string | null): number {
+  const enc = (encoding || "").toLowerCase().trim();
+  if (enc === "base64") return estimateBase64Size(body);
+  // For other encodings the body length is a reasonable proxy
+  return body.length;
+}
+
+/**
  * Parse MIME source and return metadata for all file attachments.
- * Skips inline dispositions (signature images, etc.).
+ * Skips inline dispositions (signature images, etc.). Descends into
+ * nested multipart/* containers.
  *
  * @param source - Raw MIME source of the email
  * @returns Array of attachment metadata (name, mimeType, size)
@@ -142,7 +219,7 @@ export function parseMimeAttachments(source: string): MimeAttachmentInfo[] {
   const boundary = extractBoundary(source);
   if (!boundary) return [];
 
-  const parts = splitMimeParts(source, boundary);
+  const parts = walkLeafParts(source, boundary);
   const attachments: MimeAttachmentInfo[] = [];
 
   for (const part of parts) {
@@ -152,12 +229,11 @@ export function parseMimeAttachments(source: string): MimeAttachmentInfo[] {
     if (isInlineDisposition(part.headers)) continue;
 
     const encoding = getHeader(part.headers, "Content-Transfer-Encoding");
-    if (!encoding || encoding.toLowerCase() !== "base64") continue;
 
     attachments.push({
       name: filename,
       mimeType: extractMimeType(part.headers),
-      size: extractSize(part.headers) || estimateBase64Size(part.body),
+      size: extractSize(part.headers) || estimateSize(part.body, encoding),
     });
   }
 
@@ -166,6 +242,8 @@ export function parseMimeAttachments(source: string): MimeAttachmentInfo[] {
 
 /**
  * Extract and decode a specific attachment from MIME source by filename.
+ * Supports base64, quoted-printable, and 7bit/8bit/binary transfer encodings.
+ * Descends into nested multipart/* containers.
  *
  * @param source - Raw MIME source of the email
  * @param attachmentName - Filename to extract
@@ -180,17 +258,14 @@ export function extractMimeAttachment(
   const boundary = extractBoundary(source);
   if (!boundary) return null;
 
-  const parts = splitMimeParts(source, boundary);
+  const parts = walkLeafParts(source, boundary);
 
   for (const part of parts) {
     const filename = extractFilename(part.headers);
     if (filename !== attachmentName) continue;
 
     const encoding = getHeader(part.headers, "Content-Transfer-Encoding");
-    if (!encoding || encoding.toLowerCase() !== "base64") continue;
-
-    const base64Clean = part.body.replace(/[\s\r\n]/g, "");
-    const data = Buffer.from(base64Clean, "base64");
+    const data = decodeBody(part.body, encoding);
 
     return {
       name: filename,

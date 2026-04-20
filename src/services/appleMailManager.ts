@@ -499,6 +499,12 @@ export class AppleMailManager {
                   set attCount to count of mail attachments of msg
                   if attCount > 0 then set hasAtt to "true"
                 end try
+                -- MIME-embedded attachments are invisible to AppleScript's
+                -- attachment object. Fall back to scanning the raw source.
+                -- This reads the full message source (can be MB-sized for
+                -- messages with large bodies), so it's the slowest part of
+                -- get-message for attachmentless messages. Accepted as the
+                -- cost of correct hasAttachments in the detail view.
                 if hasAtt is "false" then
                   try
                     set rawSrc to source of msg
@@ -597,6 +603,10 @@ export class AppleMailManager {
    * Get the raw MIME source of a message.
    * Used as fallback for attachment extraction when AppleScript
    * mail attachments returns empty.
+   *
+   * Timeout is 2x the default (120s) because `source of msg` returns
+   * the entire raw message including base64-encoded attachments —
+   * a 20MB attachment can take several seconds over Exchange/IMAP.
    */
   getRawSource(id: string): string | null {
     const script = buildAppLevelScript(`
@@ -684,8 +694,12 @@ export class AppleMailManager {
             set msgDate to ${AS_DATE_TO_STRING}
             set msgRead to read status of msg as string
             set msgFlagged to flagged status of msg as string
+            set msgHasAtt to "false"
+            try
+              if (count of mail attachments of msg) > 0 then set msgHasAtt to "true"
+            end try
             if msgCount > 0 then set outputText to outputText & "|||ITEM|||"
-            set outputText to outputText & msgId & "|||" & msgSubject & "|||" & msgSender & "|||" & msgDate & "|||" & msgRead & "|||" & msgFlagged
+            set outputText to outputText & msgId & "|||" & msgSubject & "|||" & msgSender & "|||" & msgDate & "|||" & msgRead & "|||" & msgFlagged & "|||" & msgHasAtt
             set msgCount to msgCount + 1
           end if
         end try
@@ -717,8 +731,12 @@ export class AppleMailManager {
                   set msgDate to ${AS_DATE_TO_STRING}
                   set msgRead to read status of msg as string
                   set msgFlagged to flagged status of msg as string
+                  set msgHasAtt to "false"
+                  try
+                    if (count of mail attachments of msg) > 0 then set msgHasAtt to "true"
+                  end try
                   if msgCount > 0 then set outputText to outputText & "|||ITEM|||"
-                  set outputText to outputText & msgId & "|||" & msgSubject & "|||" & msgSender & "|||" & msgDate & "|||" & msgRead & "|||" & msgFlagged & "|||" & name of mb
+                  set outputText to outputText & msgId & "|||" & msgSubject & "|||" & msgSender & "|||" & msgDate & "|||" & msgRead & "|||" & msgFlagged & "|||" & name of mb & "|||" & msgHasAtt
                   set msgCount to msgCount + 1
                 end if
               end if
@@ -745,6 +763,14 @@ export class AppleMailManager {
 
   /**
    * Parse message list output from AppleScript.
+   *
+   * Two emission schemas, disambiguated by length:
+   *   7 fields: single-mailbox — ...|hasAtt (mailbox from caller)
+   *   8 fields: all-mailboxes — ...|mailbox|hasAtt
+   *
+   * `hasAttachments` here is the fast-path AppleScript count only; it will
+   * false-negative for MIME-embedded attachments (a known AppleScript
+   * limitation). Use getMessage or list-attachments for authoritative info.
    */
   private parseMessageList(output: string, mailbox: string, account: string): Message[] {
     const items = output.split("|||ITEM|||");
@@ -753,6 +779,15 @@ export class AppleMailManager {
     for (const item of items) {
       const parts = item.split("|||");
       if (parts.length < 6) continue;
+
+      let msgMailbox = mailbox;
+      let hasAttachments = false;
+      if (parts.length >= 8) {
+        msgMailbox = parts[6];
+        hasAttachments = parts[7] === "true";
+      } else if (parts.length === 7) {
+        hasAttachments = parts[6] === "true";
+      }
 
       messages.push({
         id: parts[0].trim(),
@@ -764,9 +799,9 @@ export class AppleMailManager {
         isFlagged: parts[5] === "true",
         isJunk: false,
         isDeleted: false,
-        mailbox: parts.length >= 7 ? parts[6] : mailbox,
+        mailbox: msgMailbox,
         account,
-        hasAttachments: false,
+        hasAttachments,
       });
     }
 
