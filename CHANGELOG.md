@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-20
+
+### Fixed
+- **Attachments invisible to AppleScript** — `list-attachments` and `save-attachment` returned empty across all account types (iCloud, Google, Exchange) when attachments were embedded as MIME parts in the message source (a known limitation of Mail.app's AppleScript bridge). Both tools now use a two-attempt pattern: AppleScript first, then fall back to parsing the raw MIME source of the message. Path-traversal protection is preserved on the fallback save path. ([#8](https://github.com/sweetrb/apple-mail-mcp/pull/8) by @kevinmay-scoutsolutions)
+- **`hasAttachments` accuracy** — `get-message` now detects MIME-embedded attachments via raw source scan when AppleScript reports zero. `list-messages` uses the fast AppleScript count path only (may false-negative on MIME-embedded; use `get-message` or `list-attachments` for authoritative info).
+
+### Added
+- **Nested multipart support in MIME parser** — attachments nested inside `multipart/alternative` (text+html) or `multipart/related` (inline images) containers are now discovered by recursive descent.
+- **Non-base64 transfer encoding decoding** — MIME fallback now supports `quoted-printable` and `7bit`/`8bit`/`binary` attachments in addition to base64.
+- **New module `src/utils/mimeParse.ts`** — standalone MIME parser (zero dependencies) with 18 unit tests covering single/multi attachments, nested multipart, inline dispositions, and all supported transfer encodings.
+
 ## [1.4.0] - 2026-04-03
 
 ### Fixed
