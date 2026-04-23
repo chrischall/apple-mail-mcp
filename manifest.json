@@ -1,0 +1,77 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/dxt/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.3",
+  "name": "apple-mail-mcp",
+  "display_name": "Apple Mail",
+  "version": "1.2.1",
+  "description": "Apple Mail tools for Claude — read, search, send, and manage emails via AppleScript",
+  "author": {
+    "name": "Rob Sweet",
+    "email": "rob@superiortech.io",
+    "url": "https://github.com/sweetrb"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sweetrb/apple-mail-mcp"
+  },
+  "homepage": "https://github.com/sweetrb/apple-mail-mcp#readme",
+  "support": "https://github.com/sweetrb/apple-mail-mcp/issues",
+  "license": "MIT",
+  "keywords": ["apple-mail", "email", "macos", "applescript", "mcp"],
+  "server": {
+    "type": "node",
+    "entry_point": "bundle.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/bundle.mjs"]
+    }
+  },
+  "tools": [
+    { "name": "health-check", "description": "Check if Mail.app is running and accessible" },
+    { "name": "get-sync-status", "description": "Get Mail.app sync/running status" },
+    { "name": "get-mail-stats", "description": "Get total and unread message counts, recently received stats" },
+    { "name": "list-accounts", "description": "List configured Mail.app accounts" },
+    { "name": "list-mailboxes", "description": "List all mailboxes/folders" },
+    { "name": "create-mailbox", "description": "Create a new mailbox/folder" },
+    { "name": "rename-mailbox", "description": "Rename an existing mailbox/folder" },
+    { "name": "delete-mailbox", "description": "Delete a mailbox/folder" },
+    { "name": "get-unread-count", "description": "Get unread message count for a mailbox" },
+    { "name": "list-messages", "description": "List messages in a mailbox" },
+    { "name": "search-messages", "description": "Search messages by query, sender, subject, date, or flags" },
+    { "name": "get-message", "description": "Read a message by ID" },
+    { "name": "send-email", "description": "Send an email immediately" },
+    { "name": "create-draft", "description": "Create a draft email for review" },
+    { "name": "reply-to-message", "description": "Reply to a message" },
+    { "name": "forward-message", "description": "Forward a message" },
+    { "name": "move-message", "description": "Move a message to another mailbox" },
+    { "name": "delete-message", "description": "Delete a message (moves to Trash)" },
+    { "name": "mark-as-read", "description": "Mark a message as read" },
+    { "name": "mark-as-unread", "description": "Mark a message as unread" },
+    { "name": "flag-message", "description": "Flag a message" },
+    { "name": "unflag-message", "description": "Unflag a message" },
+    { "name": "batch-delete-messages", "description": "Delete multiple messages at once" },
+    { "name": "batch-move-messages", "description": "Move multiple messages to another mailbox" },
+    { "name": "batch-mark-as-read", "description": "Mark multiple messages as read" },
+    { "name": "batch-mark-as-unread", "description": "Mark multiple messages as unread" },
+    { "name": "batch-flag-messages", "description": "Flag multiple messages" },
+    { "name": "batch-unflag-messages", "description": "Unflag multiple messages" },
+    { "name": "list-attachments", "description": "List attachments on a message" },
+    { "name": "save-attachment", "description": "Save an attachment to disk" },
+    { "name": "list-rules", "description": "List Mail.app rules" },
+    { "name": "enable-rule", "description": "Enable a Mail.app rule" },
+    { "name": "disable-rule", "description": "Disable a Mail.app rule" },
+    { "name": "list-templates", "description": "List saved email templates" },
+    { "name": "get-template", "description": "Get a saved email template" },
+    { "name": "save-template", "description": "Save an email template" },
+    { "name": "delete-template", "description": "Delete a saved email template" },
+    { "name": "use-template", "description": "Create a draft from a saved template" },
+    { "name": "send-serial-email", "description": "Send personalized bulk emails (mail merge)" },
+    { "name": "search-contacts", "description": "Search Contacts.app for names and email addresses" }
+  ],
+  "compatibility": {
+    "platforms": ["darwin"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

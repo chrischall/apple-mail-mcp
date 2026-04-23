@@ -20,7 +20,6 @@
  * @see https://modelcontextprotocol.io
  */
 
-import { createRequire } from "module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -50,9 +49,9 @@ const DATE_FILTER_SCHEMA = z
   )
   .optional();
 
-// Read version from package.json to keep it in sync
-const require = createRequire(import.meta.url);
-const { version } = require("../package.json") as { version: string };
+// Version is inlined at bundle time via esbuild --define
+declare const __MCPB_VERSION__: string;
+const version = typeof __MCPB_VERSION__ !== "undefined" ? __MCPB_VERSION__ : "0.0.0";
 
 // =============================================================================
 // Server Initialization
