@@ -46,3 +46,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify committed build/ matches source
+        run: |
+          if ! git diff --quiet build/; then
+            echo "::error::build/ is out of date. Run 'npm run build' locally and commit the changes."
+            git --no-pager diff --stat build/
+            exit 1
+          fi

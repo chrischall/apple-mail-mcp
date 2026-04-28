@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Plugin install: `build/` not produced on marketplace install** — Claude Code installs path-source plugins by `git clone` only; it does not run `npm install`, so the `prepare` hook never fired and the cached plugin directory was missing `build/index.js`. The MCP server failed to start until the user manually ran `npm run build` inside the cached plugin dir. Build artifacts in `build/` are now committed to the repository so they are present immediately after marketplace clone. A pre-commit hook keeps `build/` in sync with `src/`, and CI fails if the committed `build/` is stale. ([#10](https://github.com/sweetrb/apple-mail-mcp/pull/10))
+- **`.mcp.json` plugin entrypoint resolved against user cwd** — `args` referenced `build/index.js` as a relative path, so the MCP server only started when Claude Code was launched from inside a clone of this repo. Now uses `${CLAUDE_PLUGIN_ROOT}/build/index.js` so the path resolves against the plugin's install location. ([#10](https://github.com/sweetrb/apple-mail-mcp/pull/10) by @natekettles)
+
+### Changed
+- **`prepare` script no longer rebuilds.** It now runs `husky` only. Build artifacts are committed and kept current by the pre-commit hook; rebuilding on every `npm install` was producing churn in `git status` for daily development.
+
 ## [1.5.0] - 2026-04-20
 
 ### Fixed
