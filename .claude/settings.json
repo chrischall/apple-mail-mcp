@@ -1,0 +1,5 @@
+{
+  "env": {
+    "CLAUDE_PLUGIN_ROOT": "$CLAUDE_PROJECT_DIR"
+  }
+}

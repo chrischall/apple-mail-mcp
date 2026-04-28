@@ -28,4 +28,8 @@ Thumbs.db
 
 # npm package files
 *.tgz
-.claude/
+
+# Claude Code per-user state (settings.local.json, worktrees, etc.)
+# but keep the shared project settings.json tracked.
+.claude/*
+!.claude/settings.json
