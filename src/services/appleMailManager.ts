@@ -819,6 +819,30 @@ export class AppleMailManager {
    * @param account - Account to send from
    * @returns true if sent successfully
    */
+  // ───────────────────────────────────────────────────────────────────
+  // KNOWN BUG: outgoing emails sent via AppleScript on macOS 15+ get wrapped
+  // in <blockquote type="cite"> under the Apple-Mail-URLShareWrapperClass
+  // template, so they render to recipients as quoted/forwarded content.
+  // Plain-text alternative gets `>` prefixes on every line.
+  //
+  // Reproduces with EVERY AppleScript message-creation pattern I tried:
+  //   • make new outgoing message with properties {content: ..., ...}
+  //   • make new outgoing message (no content) + `set content of newMessage`
+  //   • setting `default message format` to plain format first
+  //
+  // Apple radar FB11734014 (open since Ventura, no movement).
+  // Discussion: https://forums.macrumors.com/threads/applescript-creating-a-
+  //   new-message-in-mail-app-is-causing-weird-formatting-issues.2385052/
+  //
+  // Workaround for callers who need clean emails today: use SMTP directly
+  // (Python smtplib). See e.g. sweetrb/nhl-bracket-tracker's send_email.py.
+  //
+  // Proper fix is probably to abandon `make new outgoing message` and either:
+  //   1. Build the .emlx file ourselves and drop it into a Drafts mailbox.
+  //   2. Switch to smtplib-style direct send with Keychain-stored creds.
+  //   3. Use Mail.app's NSSharingService rather than AppleScript.
+  // Tracking issue: https://github.com/sweetrb/apple-mail-mcp/issues/12
+  // ───────────────────────────────────────────────────────────────────
   sendEmail(
     to: string[],
     subject: string,
