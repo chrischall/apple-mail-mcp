@@ -216,6 +216,25 @@ export declare class AppleMailManager {
     /**
      * Move a message to a different mailbox.
      */
+    /**
+     * Move a message to a destination mailbox, with full nested-mailbox support.
+     *
+     * Resolving the destination as `mailbox "X" of account "Y"` only finds
+     * top-level mailboxes, so nested destinations (e.g. a "Moore" subfolder)
+     * silently failed. Instead we walk the target account's full mailbox tree and
+     * match by name. Resolution is:
+     *   - account-scoped (won't move to a same-named mailbox in another account)
+     *   - ambiguity-aware: if the name matches more than one mailbox in the
+     *     account we refuse to guess and return an error — silently moving mail to
+     *     the wrong folder is worse than failing.
+     * The source message is located by walking every account's tree breadth-first
+     * (top-level mailboxes like Inbox are checked first), so messages in nested
+     * mailboxes are found too.
+     *
+     * Returns a result object so batch callers can surface the specific failure
+     * (destination not found / ambiguous / message not found).
+     */
+    private moveMessageInternal;
     moveMessage(id: string, mailbox: string, account?: string): boolean;
     /**
      * Delete multiple messages at once.
