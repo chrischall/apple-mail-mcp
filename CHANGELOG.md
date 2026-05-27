@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-05-27
+
+### Fixed
+- **`search-messages` silently ignored `from`, `subject`, `isRead`, `isFlagged` filters** — these four parameters were declared in the tool's input schema but the handler never forwarded them to `searchMessages()`, so callers (and LLM agents) reasonably assumed they worked while results came back unfiltered. The handler now passes all four through, and `searchMessages()` builds them into the AppleScript `whose` clause as AND filters. The existing `query` (subject-OR-sender) is parenthesized so precedence holds when combined. Clause-building logic is extracted to a pure `buildSearchCondition()` with 9 unit tests covering the `isRead:false` / `isFlagged:false` not-dropped regression, OR-grouping, and quote/backslash escaping. ([#13](https://github.com/sweetrb/apple-mail-mcp/pull/13) by @kevinmay-scoutsolutions)
+
+### Changed
+- **`search-messages` schema descriptions for `from` and `subject` clarify substring-match semantics** — `from` is a substring match against the full `Display Name <addr>` string (not an exact-address match), and `subject` is a substring match.
+
 ## [1.5.1] - 2026-04-28
 
 ### Fixed

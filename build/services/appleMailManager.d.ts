@@ -26,6 +26,27 @@ import type { Message, MessageContent, Mailbox, Account, Attachment, HealthCheck
  * execution via osascript. Error handling is consistent: methods
  * return null/false/empty-array on failure rather than throwing.
  */
+export interface SearchConditionFilters {
+    query?: string;
+    from?: string;
+    subject?: string;
+    isRead?: boolean;
+    isFlagged?: boolean;
+}
+/**
+ * Build the AppleScript `whose` clause for searchMessages from a filter set.
+ *
+ * - `query` is a subject-OR-sender substring match, parenthesized so it groups
+ *   correctly when ANDed with other filters.
+ * - `from` and `subject` are substring matches (`sender`/`subject` contains).
+ * - `isRead` / `isFlagged` are boolean status checks.
+ * - Returns "" when no filters are set. Every interpolated value is escaped.
+ *
+ * Exported for unit testing: the bug this addresses (filters declared in the
+ * tool schema but silently dropped) lived in this logic, so it gets direct
+ * coverage independent of Mail.app.
+ */
+export declare function buildSearchCondition(filters: SearchConditionFilters): string;
 export declare class AppleMailManager {
     /**
      * Default account used when no account is specified.
@@ -88,7 +109,7 @@ export declare class AppleMailManager {
      * @param limit - Maximum number of results
      * @returns Array of matching messages
      */
-    searchMessages(query?: string, mailbox?: string, account?: string, limit?: number, dateFrom?: string, dateTo?: string): Message[];
+    searchMessages(query?: string, mailbox?: string, account?: string, limit?: number, dateFrom?: string, dateTo?: string, from?: string, subject?: string, isRead?: boolean, isFlagged?: boolean): Message[];
     /**
      * Get a message by ID.
      *
