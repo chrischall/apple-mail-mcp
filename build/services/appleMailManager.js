@@ -1096,21 +1096,53 @@ export class AppleMailManager {
     /**
      * Move a message to a different mailbox.
      */
-    moveMessage(id, mailbox, account) {
+    /**
+     * Move a message to a destination mailbox, with full nested-mailbox support.
+     *
+     * Resolving the destination as `mailbox "X" of account "Y"` only finds
+     * top-level mailboxes, so nested destinations (e.g. a "Moore" subfolder)
+     * silently failed. Instead we walk the target account's full mailbox tree and
+     * match by name. Resolution is:
+     *   - account-scoped (won't move to a same-named mailbox in another account)
+     *   - ambiguity-aware: if the name matches more than one mailbox in the
+     *     account we refuse to guess and return an error — silently moving mail to
+     *     the wrong folder is worse than failing.
+     * The source message is located by walking every account's tree breadth-first
+     * (top-level mailboxes like Inbox are checked first), so messages in nested
+     * mailboxes are found too.
+     *
+     * Returns a result object so batch callers can surface the specific failure
+     * (destination not found / ambiguous / message not found).
+     */
+    moveMessageInternal(id, mailbox, account) {
         const targetAccount = this.resolveAccount(account);
         const targetMailbox = this.resolveMailbox(mailbox, targetAccount);
         const safeMailbox = escapeForAppleScript(targetMailbox);
         const safeAccount = escapeForAppleScript(targetAccount);
         const script = buildAppLevelScript(`
       try
+        -- \`mailboxes of account\` is already flat: it includes nested mailboxes
+        -- (named by path, e.g. "Processed/Vendors"). Descending via \`mailboxes of mb\`
+        -- is unreliable (it double-prepends the parent path), so we DON'T recurse —
+        -- we match against this flat list by exact name and use the reference directly
+        -- (addressing \`mailbox "X" of account "Y"\` only finds some top-level mailboxes).
+        set destName to "${safeMailbox}"
+        set destMatches to {}
+        repeat with mb in (mailboxes of account "${safeAccount}")
+          if (name of mb) is destName then set end of destMatches to mb
+        end repeat
+        if (count of destMatches) is 0 then return "error:Destination mailbox \\"" & destName & "\\" not found in account \\"${safeAccount}\\""
+        if (count of destMatches) > 1 then return "error:Destination mailbox \\"" & destName & "\\" is ambiguous (" & (count of destMatches) & " matches) in account \\"${safeAccount}\\"; disambiguate or move by full path"
+        set destMailbox to item 1 of destMatches
+
+        -- Find the message by id. The flat mailbox list already covers nested
+        -- mailboxes, so this reaches messages in subfolders without recursing.
         repeat with acct in accounts
-          repeat with mb in mailboxes of acct
+          repeat with mb in (mailboxes of acct)
             try
               set matchingMsgs to (messages of mb whose id is ${Number(id)})
               if (count of matchingMsgs) > 0 then
-                set msg to item 1 of matchingMsgs
-                set destMailbox to mailbox "${safeMailbox}" of account "${safeAccount}"
-                move msg to destMailbox
+                move (item 1 of matchingMsgs) to destMailbox
                 return "ok"
               end if
             end try
@@ -1121,12 +1153,21 @@ export class AppleMailManager {
         return "error:" & errMsg
       end try
     `);
-        const result = executeAppleScript(script, { timeoutMs: 60000 });
-        if (!result.success || result.output.startsWith("error:")) {
-            console.error(`Failed to move message: ${result.error || result.output}`);
-            return false;
+        const result = executeAppleScript(script, { timeoutMs: 90000 });
+        if (!result.success) {
+            return { success: false, error: result.error || "AppleScript execution failed" };
         }
-        return true;
+        if (result.output.startsWith("error:")) {
+            return { success: false, error: result.output.slice("error:".length) };
+        }
+        return { success: true };
+    }
+    moveMessage(id, mailbox, account) {
+        const { success, error } = this.moveMessageInternal(id, mailbox, account);
+        if (!success) {
+            console.error(`Failed to move message: ${error}`);
+        }
+        return success;
     }
     // ===========================================================================
     // Batch Operations
@@ -1160,11 +1201,11 @@ export class AppleMailManager {
     batchMoveMessages(ids, mailbox, account) {
         const results = [];
         for (const id of ids) {
-            const success = this.moveMessage(id, mailbox, account);
+            const { success, error } = this.moveMessageInternal(id, mailbox, account);
             results.push({
                 id,
                 success,
-                error: success ? undefined : "Failed to move message",
+                error: success ? undefined : error || "Failed to move message",
             });
         }
         return results;
