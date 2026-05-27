@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-05-27
+
+### Fixed
+- **`move-message` / `batch-move-messages` failed for nested destinations** — moving to a nested mailbox (e.g. an Exchange `Moore` subfolder) was silently failing because the destination was resolved via `mailbox "X" of account "Y"`, which only finds certain top-level mailboxes. Destination resolution now walks the flat `mailboxes of account` list (which already enumerates nested mailboxes by path, e.g. `Processed/Vendors`) and matches by exact name, using the matched reference directly. Source-message lookup also benefits — it now reaches messages in nested mailboxes. `batch-move-messages` now propagates distinct per-message errors (`not found` vs `ambiguous` vs `message not found`) instead of a generic "Failed to move message." Move timeout bumped 60s → 90s. ([#14](https://github.com/sweetrb/apple-mail-mcp/pull/14) by @kevinmay-scoutsolutions)
+
+### Changed
+- **`move-message` refuses to guess when the destination name is ambiguous within an account** — if the destination name matches more than one mailbox (e.g. two `Drafts` mailboxes in the same Gmail account), the move now fails with a clear `ambiguous (N matches)` error instead of silently moving the message into an arbitrary match. This is a behavior change: previously some such moves succeeded, but you couldn't tell *which* mailbox received the message. Pass a full path (e.g. `Parent/Drafts`) to disambiguate.
+
 ## [1.5.2] - 2026-05-27
 
 ### Fixed
