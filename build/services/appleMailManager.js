@@ -123,22 +123,40 @@ const MAILBOX_ALIASES = {
     junk: ["Junk", "Junk Email", "Spam", "JUNK", "junk"],
     archive: ["Archive", "ARCHIVE", "archive", "All Mail"],
 };
-// =============================================================================
-// Apple Mail Manager Class
-// =============================================================================
 /**
- * Manager class for Apple Mail operations.
+ * Build the AppleScript `whose` clause for searchMessages from a filter set.
  *
- * Provides methods for:
- * - Reading and searching messages
- * - Sending emails
- * - Managing mailboxes
- * - Listing accounts
+ * - `query` is a subject-OR-sender substring match, parenthesized so it groups
+ *   correctly when ANDed with other filters.
+ * - `from` and `subject` are substring matches (`sender`/`subject` contains).
+ * - `isRead` / `isFlagged` are boolean status checks.
+ * - Returns "" when no filters are set. Every interpolated value is escaped.
  *
- * All operations are synchronous since they rely on AppleScript
- * execution via osascript. Error handling is consistent: methods
- * return null/false/empty-array on failure rather than throwing.
+ * Exported for unit testing: the bug this addresses (filters declared in the
+ * tool schema but silently dropped) lived in this logic, so it gets direct
+ * coverage independent of Mail.app.
  */
+export function buildSearchCondition(filters) {
+    const { query, from, subject, isRead, isFlagged } = filters;
+    const conditions = [];
+    if (query) {
+        const safeQuery = escapeForAppleScript(query);
+        conditions.push(`(subject contains "${safeQuery}" or sender contains "${safeQuery}")`);
+    }
+    if (from) {
+        conditions.push(`sender contains "${escapeForAppleScript(from)}"`);
+    }
+    if (subject) {
+        conditions.push(`subject contains "${escapeForAppleScript(subject)}"`);
+    }
+    if (typeof isRead === "boolean") {
+        conditions.push(`read status is ${isRead ? "true" : "false"}`);
+    }
+    if (typeof isFlagged === "boolean") {
+        conditions.push(`flagged status is ${isFlagged ? "true" : "false"}`);
+    }
+    return conditions.length > 0 ? `whose ${conditions.join(" and ")}` : "";
+}
 export class AppleMailManager {
     /**
      * Default account used when no account is specified.
@@ -289,7 +307,7 @@ export class AppleMailManager {
      * @param limit - Maximum number of results
      * @returns Array of matching messages
      */
-    searchMessages(query, mailbox, account, limit = 50, dateFrom, dateTo) {
+    searchMessages(query, mailbox, account, limit = 50, dateFrom, dateTo, from, subject, isRead, isFlagged) {
         // If no account specified, search across all accounts
         if (!account) {
             const accounts = this.listAccounts();
@@ -298,18 +316,16 @@ export class AppleMailManager {
                 if (allMessages.length >= limit)
                     break;
                 const remaining = limit - allMessages.length;
-                const msgs = this.searchMessages(query, mailbox, acct.name, remaining, dateFrom, dateTo);
+                const msgs = this.searchMessages(query, mailbox, acct.name, remaining, dateFrom, dateTo, from, subject, isRead, isFlagged);
                 allMessages.push(...msgs);
             }
             return allMessages.slice(0, limit);
         }
         const targetAccount = this.resolveAccount(account);
-        // Build the search condition
-        let searchCondition = "";
-        if (query) {
-            const safeQuery = escapeForAppleScript(query);
-            searchCondition = `whose subject contains "${safeQuery}" or sender contains "${safeQuery}"`;
-        }
+        // `query` is a subject-OR-sender substring match; from/subject/isRead/isFlagged
+        // are additional AND filters. Date filtering stays post-fetch below — `whose`
+        // date comparisons are unreliable in Mail.app AppleScript. See buildSearchCondition.
+        const searchCondition = buildSearchCondition({ query, from, subject, isRead, isFlagged });
         // Build date filter AppleScript.
         // Note: dateFrom/dateTo are already validated by DATE_FILTER_SCHEMA (alphanumeric + safe
         // punctuation only), so escapeForAppleScript() below is belt-and-suspenders — it won't
