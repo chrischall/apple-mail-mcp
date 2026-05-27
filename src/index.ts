@@ -126,8 +126,13 @@ server.tool(
   "search-messages",
   {
     query: z.string().optional().describe("Text to search for in subject, sender, or content"),
-    from: z.string().optional().describe("Filter by sender email address"),
-    subject: z.string().optional().describe("Filter by subject line"),
+    from: z
+      .string()
+      .optional()
+      .describe(
+        "Filter by sender (substring match against the full sender string, i.e. display name + address — not an exact address match)"
+      ),
+    subject: z.string().optional().describe("Filter by subject line (substring match)"),
     mailbox: z
       .string()
       .optional()
@@ -139,22 +144,47 @@ server.tool(
     dateTo: DATE_FILTER_SCHEMA.describe("End date filter (e.g., 'March 1, 2026')"),
     limit: z.number().optional().describe("Maximum number of results (default: 50)"),
   },
-  withErrorHandling(({ query, mailbox, account, limit = 50, dateFrom, dateTo }) => {
-    const messages = mailManager.searchMessages(query, mailbox, account, limit, dateFrom, dateTo);
+  withErrorHandling(
+    ({
+      query,
+      mailbox,
+      account,
+      limit = 50,
+      dateFrom,
+      dateTo,
+      from,
+      subject,
+      isRead,
+      isFlagged,
+    }) => {
+      const messages = mailManager.searchMessages(
+        query,
+        mailbox,
+        account,
+        limit,
+        dateFrom,
+        dateTo,
+        from,
+        subject,
+        isRead,
+        isFlagged
+      );
 
-    if (messages.length === 0) {
-      return successResponse("No messages found matching criteria");
-    }
+      if (messages.length === 0) {
+        return successResponse("No messages found matching criteria");
+      }
 
-    const messageList = messages
-      .map(
-        (m) =>
-          `  - ID: ${m.id} | ${m.dateReceived.toLocaleDateString()} | ${m.subject} (from: ${m.sender}) [${m.isRead ? "read" : "unread"}]`
-      )
-      .join("\n");
+      const messageList = messages
+        .map(
+          (m) =>
+            `  - ID: ${m.id} | ${m.dateReceived.toLocaleDateString()} | ${m.subject} (from: ${m.sender}) [${m.isRead ? "read" : "unread"}]`
+        )
+        .join("\n");
 
-    return successResponse(`Found ${messages.length} message(s):\n${messageList}`);
-  }, "Error searching messages")
+      return successResponse(`Found ${messages.length} message(s):\n${messageList}`);
+    },
+    "Error searching messages"
+  )
 );
 
 // --- get-message ---
