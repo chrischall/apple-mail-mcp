@@ -14,6 +14,23 @@
  */
 import type { Message, MessageContent, Mailbox, Account, Attachment, HealthCheckResult, MailStats, BatchOperationResult, SyncStatus, RecentlyReceivedStats, MailRule, Contact, EmailTemplate, SerialEmailRecipient, SerialEmailResult } from "../types.js";
 /**
+ * Emits AppleScript that builds a date into the variable `varName` from numeric
+ * components.
+ *
+ * This is locale-independent, unlike `date "May 30, 2026"` string coercion,
+ * which AppleScript parses using the system locale. On a non-English locale
+ * (e.g. pt_PT) the English month name throws "Invalid date and time (-30720)";
+ * because the comparison happens inside the per-message `try` in searchMessages,
+ * that error is swallowed and every message is skipped, so the search returns
+ * zero results even when matches exist. See issue #15.
+ *
+ * `day` is reset to 1 before assigning month/year so an existing day-of-month
+ * (e.g. 31) cannot overflow into the next month when the month is changed.
+ *
+ * Exported for unit testing.
+ */
+export declare function buildAppleScriptDate(varName: string, d: Date): string;
+/**
  * Manager class for Apple Mail operations.
  *
  * Provides methods for:

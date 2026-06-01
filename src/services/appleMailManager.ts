@@ -121,6 +121,35 @@ function parseAppleScriptDate(dateStr: string): Date {
 }
 
 /**
+ * Emits AppleScript that builds a date into the variable `varName` from numeric
+ * components.
+ *
+ * This is locale-independent, unlike `date "May 30, 2026"` string coercion,
+ * which AppleScript parses using the system locale. On a non-English locale
+ * (e.g. pt_PT) the English month name throws "Invalid date and time (-30720)";
+ * because the comparison happens inside the per-message `try` in searchMessages,
+ * that error is swallowed and every message is skipped, so the search returns
+ * zero results even when matches exist. See issue #15.
+ *
+ * `day` is reset to 1 before assigning month/year so an existing day-of-month
+ * (e.g. 31) cannot overflow into the next month when the month is changed.
+ *
+ * Exported for unit testing.
+ */
+export function buildAppleScriptDate(varName: string, d: Date): string {
+  return [
+    `set ${varName} to current date`,
+    `set day of ${varName} to 1`,
+    `set year of ${varName} to ${d.getFullYear()}`,
+    `set month of ${varName} to ${d.getMonth() + 1}`,
+    `set day of ${varName} to ${d.getDate()}`,
+    `set hours of ${varName} to ${d.getHours()}`,
+    `set minutes of ${varName} to ${d.getMinutes()}`,
+    `set seconds of ${varName} to ${d.getSeconds()}`,
+  ].join("\n      ");
+}
+
+/**
  * Builds an AppleScript command scoped to a specific account.
  */
 function buildAccountScopedScript(account: string, command: string): string {
@@ -430,18 +459,27 @@ export class AppleMailManager {
     // date comparisons are unreliable in Mail.app AppleScript. See buildSearchCondition.
     const searchCondition = buildSearchCondition({ query, from, subject, isRead, isFlagged });
 
-    // Build date filter AppleScript.
-    // Note: dateFrom/dateTo are already validated by DATE_FILTER_SCHEMA (alphanumeric + safe
-    // punctuation only), so escapeForAppleScript() below is belt-and-suspenders — it won't
-    // alter valid date strings but guards against future schema changes.
+    // Build the date-bound comparison. The comparison dates are constructed in
+    // AppleScript from numeric components (see buildAppleScriptDate) and compared
+    // against `msgDate` (set per-message below) rather than coerced from a
+    // locale-formatted string — `date "May 30, 2026"` throws on non-English system
+    // locales, and that swallowed error silently zeroes out results. See issue #15.
+    // dateFrom/dateTo are already validated by DATE_FILTER_SCHEMA as parseable dates.
+    let dateSetup = "";
     let dateFilter = "";
     if (dateFrom || dateTo) {
       const dateChecks: string[] = [];
       if (dateFrom) {
-        dateChecks.push(`date received of msg >= date "${escapeForAppleScript(dateFrom)}"`);
+        dateSetup += buildAppleScriptDate("_dateFrom", new Date(dateFrom)) + "\n      ";
+        dateChecks.push("msgDate >= _dateFrom");
       }
       if (dateTo) {
-        dateChecks.push(`date received of msg <= date "${escapeForAppleScript(dateTo)}"`);
+        const to = new Date(dateTo);
+        // A date-only upper bound (no time component) is treated as end-of-day so
+        // messages received later that same day are still included.
+        if (!/\d:\d/.test(dateTo)) to.setHours(23, 59, 59, 0);
+        dateSetup += buildAppleScriptDate("_dateTo", to) + "\n      ";
+        dateChecks.push("msgDate <= _dateTo");
       }
       dateFilter = dateChecks.join(" and ");
     }
@@ -453,7 +491,7 @@ export class AppleMailManager {
       const targetMailbox = this.resolveMailbox(mailbox, targetAccount);
 
       searchCommand = `
-      set outputText to ""
+      ${dateSetup}set outputText to ""
       set theMailbox to mailbox "${escapeForAppleScript(targetMailbox)}"
       set allMessages to messages of theMailbox ${searchCondition}
       set msgCount to 0
@@ -479,7 +517,7 @@ export class AppleMailManager {
     } else {
       // Search ALL mailboxes — iterate every mailbox in the account, dedup by message ID
       searchCommand = `
-      set outputText to ""
+      ${dateSetup}set outputText to ""
       set msgCount to 0
       set seenIds to {}
       repeat with mb in mailboxes
