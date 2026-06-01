@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2026-06-01
+
+### Fixed
+- **`.mcp.json` parsed but never *connected* as a project-scope config (incomplete 1.5.4 fix)** — 1.5.4 switched the entrypoint to `${CLAUDE_PLUGIN_ROOT:-.}/build/index.js`, which fixed the *parse* error but not the actual failure: in a project-scope clone `CLAUDE_PLUGIN_ROOT` is unset, so the path fell back to `.`, which Claude Code resolves against the launching process's working directory — **not** the repo root — so the server still failed to connect. A single entrypoint string cannot serve both contexts: plugin installs require `${CLAUDE_PLUGIN_ROOT}` (in a plugin, `CLAUDE_PROJECT_DIR` points at the *user's* project, not the plugin dir), clones require `${CLAUDE_PROJECT_DIR:-.}`, and Claude Code does not support nested defaults (`${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-.}}` does not expand). The two distribution paths are now **decoupled**: the root `.mcp.json` uses `${CLAUDE_PROJECT_DIR:-.}/build/index.js` for the clone/contributor workflow, and the plugin carries its own MCP config in `.claude-plugin/plugin.json` using `${CLAUDE_PLUGIN_ROOT}/build/index.js`. Because `plugin.json` now declares `mcpServers`, the plugin no longer auto-loads the root `.mcp.json`, so there is no double-registration. See the README's [Running from a clone](README.md#running-from-a-clone-in-claude-code-project-scope-mcpjson) section. ([#15](https://github.com/sweetrb/apple-mail-mcp/issues/15))
+
 ## [1.5.4] - 2026-06-01
 
 ### Fixed

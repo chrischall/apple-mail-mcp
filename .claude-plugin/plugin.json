@@ -1,9 +1,17 @@
 {
   "name": "apple-mail",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Manage Apple Mail through natural language - read, search, send, and organize emails (macOS only)",
   "author": {
     "name": "Rob Sweet",
     "email": "rob@superiortech.io"
+  },
+  "mcpServers": {
+    "apple-mail": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/build/index.js"
+      ]
+    }
   }
 }
