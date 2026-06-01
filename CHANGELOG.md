@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-06-01
+
+### Fixed
+- **`.mcp.json` failed to load as a project-scope config** — the entrypoint was `${CLAUDE_PLUGIN_ROOT}/build/index.js`, but `CLAUDE_PLUGIN_ROOT` is only set when the server is launched from a marketplace **plugin** install. Loaded as a project-scope `.mcp.json` (Claude Code run from inside a clone — the local-dev and contributor workflow), the variable is unset and, with no default, Claude Code fails to parse the config and the server never loads. Now uses the documented dual-context form `${CLAUDE_PLUGIN_ROOT:-.}/build/index.js`: plugin installs still resolve against the plugin root, while project-scope use falls back to `./build/index.js` relative to the repo. ([#15](https://github.com/sweetrb/apple-mail-mcp/issues/15))
+- **`search-messages` returned zero results whenever `dateFrom`/`dateTo` was set on non-English system locales** — the date bounds were compiled into AppleScript as `date "May 30, 2026"` string coercion, which Mail.app parses using the system locale. On a non-English locale (e.g. pt_PT) the English month name throws `Invalid date and time (-30720)`; because the comparison runs inside the per-message `try` block, the error was silently swallowed and every message was skipped, so date-filtered searches returned nothing even when matching messages existed. The comparison date is now built from numeric components (`set year/month/day/…`) in a new locale-independent `buildAppleScriptDate()` helper, so date filters work regardless of system locale. A date-only `dateTo` is now treated as end-of-day so the upper bound includes messages received later that same day. ([#15](https://github.com/sweetrb/apple-mail-mcp/issues/15))
+
 ## [1.5.3] - 2026-05-27
 
 ### Fixed
