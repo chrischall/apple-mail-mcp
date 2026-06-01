@@ -700,6 +700,22 @@ If installed from source, use this configuration:
 }
 ```
 
+#### Running from a clone in Claude Code (project-scope `.mcp.json`)
+
+This repo ships a `.mcp.json` at its root so that, when you run `claude` from inside a clone, the server is registered automatically as a **project-scope** server — no manual config needed. After `npm run build`, just launch Claude Code from the repo directory and approve the server when prompted.
+
+The entrypoint is written as:
+
+```json
+"args": ["${CLAUDE_PROJECT_DIR:-.}/build/index.js"]
+```
+
+`CLAUDE_PROJECT_DIR` is the variable Claude Code injects into a project/user-scoped server's environment, and it resolves to the repo root. **You must launch `claude` from inside the repo** for this to work — the bare `.` fallback is only a last resort and is *not* reliable, because it resolves against the launching process's working directory, not the repo.
+
+> **Why not `${CLAUDE_PLUGIN_ROOT}`?** `CLAUDE_PLUGIN_ROOT` is set **only** for marketplace plugin installs, never for a project-scope clone, so it can't drive the clone workflow. Conversely, a plugin install can't use `CLAUDE_PROJECT_DIR` (in a plugin, that points at the *user's* project, not the plugin's own directory). Claude Code does **not** support nested defaults like `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-.}}`, so a single entrypoint string cannot serve both contexts. The two distribution paths are therefore decoupled: the **plugin** carries its own MCP config in `.claude-plugin/plugin.json` (using `${CLAUDE_PLUGIN_ROOT}`), while the root `.mcp.json` is dedicated to the **clone** workflow (using `${CLAUDE_PROJECT_DIR:-.}`). Because `plugin.json` declares its own `mcpServers`, the plugin does not also auto-load the root `.mcp.json`, so there is no double-registration.
+
+> **Heads-up on scope precedence:** project-scope (`.mcp.json`) outranks user-scope. If you *also* have an `apple-mail` entry registered at user scope (e.g. an absolute path in `~/.claude.json`), the project-scope entry wins and the user-scope one is ignored entirely. Pick one — for local development on this repo, the project-scope `.mcp.json` is the intended source. To pin a specific local build instead, register it at **local** scope (`claude mcp add apple-mail -s local -- node /abs/path/build/index.js`), which outranks project scope.
+
 ---
 
 ## Security and Privacy
@@ -787,6 +803,12 @@ The `\\\\` in JSON becomes `\\` in the actual string, which represents a single 
 - Check your network connection
 - Verify Mail.app can send emails manually
 - Check if the account is configured correctly in Mail.app
+
+### `apple-mail` server fails to connect when run from a clone
+- The root `.mcp.json` resolves its entrypoint via `${CLAUDE_PROJECT_DIR:-.}/build/index.js`. **Launch `claude` from inside the repo directory** — `CLAUDE_PROJECT_DIR` only resolves to the repo root in that case; the bare `.` fallback uses the launching shell's working directory and will point at the wrong place otherwise.
+- Run `npm run build` first — the server is `build/index.js`, which doesn't exist until you build.
+- Run `claude mcp list` to check status. If you see a *conflicting scopes* warning for `apple-mail`, you have it registered at more than one scope; project-scope wins. See [Running from a clone](#running-from-a-clone-in-claude-code-project-scope-mcpjson) for how scope precedence resolves.
+- If `claude mcp get apple-mail` shows **⏸ Pending approval**, approve the project-scope server (Claude Code prompts on startup, or run it again after approving).
 
 ---
 
