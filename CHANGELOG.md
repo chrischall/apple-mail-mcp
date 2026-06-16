@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.6] - 2026-06-16
+
+### Security
+- **`@modelcontextprotocol/sdk` was pinned to the vulnerable `1.4.1`** — that exact pin falls in the `<=1.25.1` range flagged by two high-severity advisories ([GHSA-8r9q-7v3j-jr4g](https://github.com/advisories/GHSA-8r9q-7v3j-jr4g) ReDoS, [GHSA-w48q-cv73-mx4w](https://github.com/advisories/GHSA-w48q-cv73-mx4w) DNS-rebinding protection off by default), and because the pin was exact, `npm audit` reported "No fix available" for anyone installing `apple-mail-mcp`. Bumped to `^1.29.0`, out of the vulnerable range. No source changes were needed — the `McpServer` / `StdioServerTransport` APIs in use are unchanged across the bump, and the server still registers all 40 tools over stdio. ([#19](https://github.com/sweetrb/apple-mail-mcp/issues/19) / [#20](https://github.com/sweetrb/apple-mail-mcp/pull/20) by @chrischall)
+- **Dev/test toolchain audit advisories cleared** — `npm audit` flagged 8 vulnerabilities (2 critical, 2 high, 4 moderate) in the test/lint toolchain only (no runtime impact for consumers): `esbuild <=0.28.0` (via `vite` → `vitest@2`), `postcss <8.5.10` (via `vite`), and `js-yaml <=4.1.1` (via `eslint` → `@eslint/eslintrc`). Bumped `vitest` + `@vitest/coverage-v8` `^2` → `^4.1.9` (pulls safe `vite` 8 / `esbuild` 0.28.1) and added `overrides` for `js-yaml ^4.2.0` and `postcss ^8.5.15`. All 93 unit tests pass on vitest 4; combined `npm audit` is clean (0 vulnerabilities). ([#21](https://github.com/sweetrb/apple-mail-mcp/issues/21) / [#22](https://github.com/sweetrb/apple-mail-mcp/pull/22) by @chrischall)
+
 ## [1.5.5] - 2026-06-01
 
 ### Fixed
